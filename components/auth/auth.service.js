@@ -1,0 +1,199 @@
+// import { generateAccessAndRefreshToken, generateOtp } from "../../helper/auth";
+import bcrypt from "bcrypt";
+import userMdl from "../../model/user.js";
+import speakeasy from "speakeasy";
+import QRCode, { create } from "qrcode";
+import auth from "../../helper/auth.js";
+import otp from "../../model/otp.js";
+
+const register = async (reqBody) => {
+  const { fname, lname, email, password } = reqBody;
+
+  try {
+    const hashPassword = bcrypt.hashSync(password, 10);
+    const newUser = await userMdl({
+      fname,
+      lname,
+      email,
+      password: hashPassword,
+      is2FAEnabled: true,
+    });
+    await newUser.save();
+    if (!newUser) {
+      throw new Error("Error during register");
+    }
+    return {
+      message: "Registered successfully",
+      userData: newUser,
+    };
+  } catch (err) {
+    throw new Error(message);
+  }
+};
+
+///login user
+const login = async (reqBody) => {
+  const { email, password } = reqBody;
+  const findUser = await userMdl.findOne({ email });
+
+  if (!findUser) {
+    throw new Error("USER_NOT_FOUND");
+  }
+
+  if (!bcrypt.compareSync(password, findUser.password)) {
+    throw new Error("Invalid password");
+  }
+  const userData = {
+    _id: findUser._id,
+    fname: findUser.fname,
+    lname: findUser.lname,
+    email: findUser.email,
+    IntermediateToken: findUser.IntermediateToken,
+  };
+  return {
+    userData,
+  };
+};
+
+// QR
+const get2FAQrData = async (email) => {
+  try {
+    const userFound = await userMdl.findOne({ email });
+
+    if (!userFound) {
+      throw new Error(`User not found`);
+    }
+
+    if (!userFound.is2FAEnabled) {
+      throw new Error(`2FA not enabled`);
+    }
+
+    if (userFound.twoFactorMode) {
+      throw new Error(`2FA mode already setup`);
+    }
+    const secret = speakeasy.generateSecret({
+      name: `2FA : ${email}`,
+    });
+    const qr = await QRCode.toDataURL(secret.otpauth_url);
+
+    return { qr, secret: secret.base32 };
+  } catch (err) {
+    throw new Error(err.message);
+  }
+};
+
+// app
+const verified2FAOnApp = async (secret, code, userId) => {
+  try {
+    const user = await userMdl.findById(userId);
+    if (!user.is2FAEnabled) {
+      throw new Error("2FA in not enabled");
+    }
+    if (user.twoFactorMode) {
+      throw new Error("2FA mode already set");
+    }
+    let verified = speakeasy.totp.verify({
+      secret,
+      encoding: "base32",
+      token: code,
+    });
+    if (!verified) {
+      return { isTwoFactorVerified: false };
+    }
+    await userMdl.findByIdAndUpdate(
+      { _id: userId },
+      {
+        secret,
+        twoFactorMode: "APP",
+      }
+    );
+    const isTwoFactorVerified = true;
+    const { accessToken, refreshToken } =
+      await auth.generateAccessAndRefreshToken(userId, isTwoFactorVerified);
+    const result = { accessToken, refreshToken, isTwoFactorVerified };
+    return result;
+  } catch (err) {
+    throw new Error(err.message);
+  }
+};
+
+// Email
+const send2FAOnEmail = async (email, userId) => {
+  try {
+    const user = await userMdl.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+    const currentTime = new Date();
+    const otpExpiry = new Date(currentTime);
+    const code = auth.generateOtp();
+    console.log(code);
+
+    const options = {
+      otp: bcrypt.hashSync(code, bcrypt.genSaltSync(10)),
+      createdAt: currentTime,
+      otpExpiry: otpExpiry.setMinutes(otpExpiry.getMinutes() + 1),
+      email,
+    };
+    await otp.create(options);
+
+    await userMdl.findByIdAndUpdate(
+      { _id: userId },
+      { twoFactorMode: "EMAIl" }
+    );
+    return { status: true };
+  } catch (err) {
+    throw new Error(err.message);
+  }
+};
+
+// verify Email
+
+const verify2FAByEmail = async (email, code, userId) => {
+  try {
+    const userFound = await userMdl.findOne({ email });
+    if (!userFound) {
+      throw new Error("User not found");
+    }
+    const allotp = await otp.find({ email });
+    let hasValidOTP = false;
+
+    allotp.forEach(async (auth) => {
+      const isMatch = bcrypt.compareSync(code, auth.otp);
+
+      if (isMatch && new Date() < auth.otpExpiry) {
+        hasValidOTP = true;
+        await otp.deleteOne({ email, otp: auth.otp });
+        return false;
+      }
+      return true;
+    });
+
+    // Mark user as verified
+    await userMdl.findOneAndUpdate({ email }, { twoFactorMode: "EMAIL" });
+
+    if (hasValidOTP) {
+      let isTwoFactorVerified = true;
+      const { accessToken, refreshToken } =
+        await auth.generateAccessAndRefreshToken(userId, isTwoFactorVerified);
+      return { accessToken, refreshToken, isTwoFactorVerified: true };
+    }
+    return { error: "otp is expire" };
+  } catch (error) {
+    throw new Error(error.message);
+  }
+};
+
+const homepage = () => {
+  return { message: "This Is Homepage" };
+};
+
+export default {
+  register,
+  login,
+  get2FAQrData,
+  verified2FAOnApp,
+  send2FAOnEmail,
+  verify2FAByEmail,
+  homepage,
+};
