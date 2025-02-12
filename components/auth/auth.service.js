@@ -1,4 +1,3 @@
-// import { generateAccessAndRefreshToken, generateOtp } from "../../helper/auth";
 import bcrypt from "bcrypt";
 import userMdl from "../../model/user.js";
 import speakeasy from "speakeasy";
@@ -178,7 +177,7 @@ const verify2FAByEmail = async (email, code, userId) => {
         await auth.generateAccessAndRefreshToken(userId, isTwoFactorVerified);
       return { accessToken, refreshToken, isTwoFactorVerified: true };
     }
-    return { error: "otp is expire" };
+    return { isTwoFactorVerified: false };
   } catch (error) {
     throw new Error(error.message);
   }
