@@ -21,9 +21,19 @@ const register = async (reqBody) => {
     if (!newUser) {
       throw new Error("Error during register");
     }
+    const userData = {
+      _id: newUser._id,
+      fname: newUser.fname,
+      lname: newUser.lname,
+      email: newUser.email,
+      is2FAEnabled: newUser.is2FAEnabled,
+      secret: newUser.secret,
+      twoFactorMode: newUser.twoFactorMode,
+      _id: newUser._id,
+    };
     return {
       message: "Registered successfully",
-      userData: newUser,
+      userData: userData,
     };
   } catch (err) {
     throw new Error(message);
