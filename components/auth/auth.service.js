@@ -29,7 +29,6 @@ const register = async (reqBody) => {
       is2FAEnabled: newUser.is2FAEnabled,
       secret: newUser.secret,
       twoFactorMode: newUser.twoFactorMode,
-      _id: newUser._id,
     };
     return {
       message: "Registered successfully",
@@ -57,7 +56,6 @@ const login = async (reqBody) => {
     fname: findUser.fname,
     lname: findUser.lname,
     email: findUser.email,
-    IntermediateToken: findUser.IntermediateToken,
   };
   return {
     userData,
