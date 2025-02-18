@@ -49,23 +49,7 @@ const intermediateTokenVerify = async (req, res, next) => {
     return next(err.message);
   }
 };
-const validate = (schema) => {
-  return async (req, res, next) => {
-    try {
-      await schema.validateAsync(req.body, { abortEarly: false });
-      next();
-    } catch (error) {
-      const errorMessage = [];
-      for (let detail of error.details) {
-        errorMessage.push(detail.message);
-      }
-      res.status(400).json({ error: errorMessage });
-    }
-  };
-};
-
 export default {
   verify,
   intermediateTokenVerify,
-  validate,
 };

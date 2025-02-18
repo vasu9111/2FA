@@ -12,8 +12,17 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const login = await authService.login(req.body);
-
-    login.IntermediateToken = await auth.intermediateToken(login.userData._id);
+    if (login.userData.is2FAEnabled) {
+      login.IntermediateToken = await auth.intermediateToken(
+        login.userData._id
+      );
+    } else {
+      const tokens = await auth.generateAccessAndRefreshToken(
+        login.userData._id
+      );
+      login.accessToken = tokens.accessToken;
+      login.refreshToken = tokens.refreshToken;
+    }
     res.status(200).json(login);
   } catch (error) {
     next(error);
@@ -29,9 +38,9 @@ const get2FAQrData = async (req, res, next) => {
   }
 };
 
-const verified2FAOnApp = async (req, res, next) => {
+const send2FAOnApp = async (req, res, next) => {
   try {
-    const Data = await authService.verified2FAOnApp(
+    const Data = await authService.send2FAOnApp(
       req.body.secret,
       req.body.code,
       req.user._id
@@ -42,6 +51,17 @@ const verified2FAOnApp = async (req, res, next) => {
   }
 };
 
+const verified2FAOnApp = async (req, res, next) => {
+  try {
+    const result = await authService.verified2FAOnApp(
+      req.body.code,
+      req.user._id
+    );
+    res.status(200).json(result);
+  } catch (err) {
+    next(new Error(err.message));
+  }
+};
 const send2FAOnEmail = async (req, res, next) => {
   try {
     const Data = await authService.send2FAOnEmail(
@@ -81,6 +101,7 @@ export default {
   register,
   login,
   get2FAQrData,
+  send2FAOnApp,
   verified2FAOnApp,
   send2FAOnEmail,
   verify2FAByEmail,
