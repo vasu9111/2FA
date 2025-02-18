@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import userMdl from "../../model/user.js";
 import speakeasy from "speakeasy";
-import QRCode, { create } from "qrcode";
+import QRCode from "qrcode";
 import auth from "../../helper/auth.js";
 import otp from "../../model/otp.js";
 
@@ -56,13 +56,15 @@ const login = async (reqBody) => {
     fname: findUser.fname,
     lname: findUser.lname,
     email: findUser.email,
+    is2FAEnabled: findUser.is2FAEnabled,
+    twoFactorMode: findUser.twoFactorMode,
   };
   return {
     userData,
   };
 };
 
-// QR
+// QR send
 const get2FAQrData = async (email) => {
   try {
     const userFound = await userMdl.findOne({ email });
@@ -75,13 +77,11 @@ const get2FAQrData = async (email) => {
       throw new Error(`2FA not enabled`);
     }
 
-    if (userFound.twoFactorMode) {
-      throw new Error(`2FA mode already setup`);
-    }
     const secret = speakeasy.generateSecret({
       name: `2FA : ${email}`,
     });
     const qr = await QRCode.toDataURL(secret.otpauth_url);
+    await userMdl.findByIdAndUpdate(userFound._id, { secret: secret.base32 });
 
     return { qr, secret: secret.base32 };
   } catch (err) {
@@ -89,18 +89,12 @@ const get2FAQrData = async (email) => {
   }
 };
 
-// app
-const verified2FAOnApp = async (secret, code, userId) => {
+//
+const send2FAOnApp = async (secret, code, userId) => {
   try {
     const user = await userMdl.findById(userId);
-    if (!user.is2FAEnabled) {
-      throw new Error("2FA in not enabled");
-    }
-    if (user.twoFactorMode) {
-      throw new Error("2FA mode already set");
-    }
     let verified = speakeasy.totp.verify({
-      secret,
+      secret: user.secret,
       encoding: "base32",
       token: code,
     });
@@ -124,7 +118,29 @@ const verified2FAOnApp = async (secret, code, userId) => {
   }
 };
 
-// Email
+// app verified
+const verified2FAOnApp = async (code, userId) => {
+  try {
+    const user = await userMdl.findById(userId);
+    let verified = speakeasy.totp.verify({
+      secret: user.secret,
+      encoding: "base32",
+      token: code,
+    });
+    if (!verified) {
+      return { isTwoFactorVerified: false };
+    }
+    const isTwoFactorVerified = true;
+    const { accessToken, refreshToken } =
+      await auth.generateAccessAndRefreshToken(userId, isTwoFactorVerified);
+    const result = { accessToken, refreshToken, isTwoFactorVerified };
+    return result;
+  } catch (err) {
+    throw new Error(err.message);
+  }
+};
+
+// Email send
 const send2FAOnEmail = async (email, userId) => {
   try {
     const user = await userMdl.findById(userId);
@@ -175,10 +191,6 @@ const verify2FAByEmail = async (email, code, userId) => {
       }
       return true;
     });
-
-    // Mark user as verified
-    await userMdl.findOneAndUpdate({ email }, { twoFactorMode: "EMAIL" });
-
     if (hasValidOTP) {
       let isTwoFactorVerified = true;
       const { accessToken, refreshToken } =
@@ -190,7 +202,7 @@ const verify2FAByEmail = async (email, code, userId) => {
     throw new Error(error.message);
   }
 };
-
+// home page
 const homepage = () => {
   return { message: "This Is Homepage" };
 };
@@ -199,6 +211,7 @@ export default {
   register,
   login,
   get2FAQrData,
+  send2FAOnApp,
   verified2FAOnApp,
   send2FAOnEmail,
   verify2FAByEmail,

@@ -11,6 +11,13 @@ router.get(
   authMiddleware.intermediateTokenVerify,
   authController.get2FAQrData
 );
+
+router.post(
+  "/send-2FA-on-App",
+  authMiddleware.intermediateTokenVerify,
+  authController.send2FAOnApp
+);
+
 router.post(
   "/verify-2FA-on-App",
   authMiddleware.intermediateTokenVerify,
