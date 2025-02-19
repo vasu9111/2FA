@@ -1,11 +1,19 @@
 import express from "express";
 import authController from "./auth.controller.js";
 import authMiddleware from "../../middleware/authMiddleware.js";
-
+import authValidation from "./auth.validation.js";
 const router = express.Router();
 
-router.post("/register", authController.register);
-router.post("/login", authController.login);
+router.post(
+  "/register",
+  authMiddleware.validate(authValidation.registerUser),
+  authController.register
+);
+router.post(
+  "/login",
+  authMiddleware.validate(authValidation.loginUser),
+  authController.login
+);
 router.get(
   "/get-qr",
   authMiddleware.intermediateTokenVerify,
@@ -36,6 +44,11 @@ router.post(
   authController.verify2FAByEmail
 );
 
-router.get("/homepage", authMiddleware.verify, authController.homepage);
-
+router.get("/homepage", authMiddleware.isLoggedIn, authController.homepage);
+router.post(
+  "/list",
+  authMiddleware.isLoggedIn,
+  authMiddleware.is2faDone,
+  authController.privateList
+);
 export default router;
