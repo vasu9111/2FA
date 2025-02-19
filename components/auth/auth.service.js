@@ -4,6 +4,7 @@ import speakeasy from "speakeasy";
 import QRCode from "qrcode";
 import auth from "../../helper/auth.js";
 import otp from "../../model/otp.js";
+import userDb from "../../db/userDb.js";
 
 const register = async (reqBody) => {
   const { fname, lname, email, password } = reqBody;
@@ -42,7 +43,7 @@ const register = async (reqBody) => {
 ///login user
 const login = async (reqBody) => {
   const { email, password } = reqBody;
-  const findUser = await userMdl.findOne({ email });
+  const findUser = await userDb.findByEmail(email);
 
   if (!findUser) {
     throw new Error("USER_NOT_FOUND");
@@ -67,7 +68,7 @@ const login = async (reqBody) => {
 // QR send
 const get2FAQrData = async (email) => {
   try {
-    const userFound = await userMdl.findOne({ email });
+    const userFound = await userDb.findByEmail(email);
 
     if (!userFound) {
       throw new Error(`User not found`);
@@ -81,7 +82,9 @@ const get2FAQrData = async (email) => {
       name: `2FA : ${email}`,
     });
     const qr = await QRCode.toDataURL(secret.otpauth_url);
-    await userMdl.findByIdAndUpdate(userFound._id, { secret: secret.base32 });
+    await userDb.updateUserById(userFound._id, {
+      secret: secret.base32,
+    });
 
     return { qr, secret: secret.base32 };
   } catch (err) {
@@ -92,7 +95,7 @@ const get2FAQrData = async (email) => {
 //
 const send2FAOnApp = async (secret, code, userId) => {
   try {
-    const user = await userMdl.findById(userId);
+    const user = await userDb.findByUserId(userId);
     let verified = speakeasy.totp.verify({
       secret: user.secret,
       encoding: "base32",
@@ -121,7 +124,7 @@ const send2FAOnApp = async (secret, code, userId) => {
 // app verified
 const verified2FAOnApp = async (code, userId) => {
   try {
-    const user = await userMdl.findById(userId);
+    const user = await userDb.updateUserById(userId);
     let verified = speakeasy.totp.verify({
       secret: user.secret,
       encoding: "base32",
@@ -143,7 +146,7 @@ const verified2FAOnApp = async (code, userId) => {
 // Email send
 const send2FAOnEmail = async (email, userId) => {
   try {
-    const user = await userMdl.findById(userId);
+    const user = await userDb.findByUserId(userId);
     if (!user) {
       throw new Error("User not found");
     }
@@ -160,10 +163,7 @@ const send2FAOnEmail = async (email, userId) => {
     };
     await otp.create(options);
 
-    await userMdl.findByIdAndUpdate(
-      { _id: userId },
-      { twoFactorMode: "EMAIl" }
-    );
+    await userDb.updateUserById({ _id: userId }, { twoFactorMode: "EMAIL" });
     return { status: true };
   } catch (err) {
     throw new Error(err.message);
@@ -174,7 +174,7 @@ const send2FAOnEmail = async (email, userId) => {
 
 const verify2FAByEmail = async (email, code, userId) => {
   try {
-    const userFound = await userMdl.findOne({ email });
+    const userFound = await userDb.findByEmail(email);
     if (!userFound) {
       throw new Error("User not found");
     }
@@ -207,6 +207,11 @@ const homepage = () => {
   return { message: "This Is Homepage" };
 };
 
+const privateList = async () => {
+  return {
+    message: "login",
+  };
+};
 export default {
   register,
   login,
@@ -216,4 +221,5 @@ export default {
   send2FAOnEmail,
   verify2FAByEmail,
   homepage,
+  privateList,
 };

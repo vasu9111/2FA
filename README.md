@@ -47,3 +47,5 @@
                         }
 
 - Home page :-localhost:5000/api/auth/homepage
+
+- check loggedin and 2fadone :- localhost:5000/api/auth/list

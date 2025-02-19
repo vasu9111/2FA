@@ -25,6 +25,8 @@ const login = async (req, res, next) => {
     }
     res.status(200).json(login);
   } catch (error) {
+    console.log(error);
+
     next(error);
   }
 };
@@ -97,6 +99,14 @@ const homepage = async (req, res, next) => {
   }
 };
 
+const privateList = async (req, res, next) => {
+  try {
+    const result = await authService.privateList();
+    res.status(200).json(result);
+  } catch (err) {
+    next(new Error(err.message));
+  }
+};
 export default {
   register,
   login,
@@ -106,4 +116,5 @@ export default {
   send2FAOnEmail,
   verify2FAByEmail,
   homepage,
+  privateList,
 };
