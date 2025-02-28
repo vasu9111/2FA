@@ -6,11 +6,15 @@ const userSchema = new mongoose.Schema(
     lname: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    is2FAEnabled: { type: Boolean, default: false },
-    secret: { type: String, default: null },
-    twoFactorMode: { type: String, default: null },
+    is2FAEnabled: { type: Boolean },
+    secret: { type: String, default: "" },
+    twoFactorMode: {
+      type: String,
+      enum: ["APP", "EMAIL"],
+      default: "APP",
+    },
   },
   { versionKey: false }
 );
 
-export default mongoose.model("User", userSchema);
+export default mongoose.model("user", userSchema);

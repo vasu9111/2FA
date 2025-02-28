@@ -25,14 +25,12 @@ const isLoggedIn = async (req, res, next) => {
   }
   try {
     const decoded = jwt.verify(token, accessTokenKey);
-    const userData = await userDb.findByUserId(decoded.id);
+    const userData = await userDb.findUserById(decoded.id);
+    userData.is2FAVerified = decoded.isTwoFactorVerified;
     req.user = userData;
     next();
   } catch (err) {
-    const error = new Error(err.message);
-    error.code = err.code || "SERVER_ERROR";
-    error.status = err.status || 500;
-    return next(error);
+    return next(err);
   }
 };
 const intermediateTokenVerify = async (req, res, next) => {
@@ -41,29 +39,24 @@ const intermediateTokenVerify = async (req, res, next) => {
     next(new Error("Token is required"));
   }
   try {
-    const decoded = jwt.verify(token, config.INTERMEDIATE_TOKEN_KEY);
+    const decoded = jwt.verify(token, config.intermediateTokenKey);
 
-    const userData = await userDb.findByUserId(decoded.id);
+    const userData = await userDb.findUserById(decoded.id);
 
     req.user = userData;
 
     next();
   } catch (err) {
-    return next(err.message);
+    return next(err);
   }
 };
 
-const is2faDone = async (req, res, next) => {
+// is2FAVerified
+export const is2FAVerified = (req, res, next) => {
   try {
-    const userFound = await userDb.findByUserId(req.user._id);
-    if (!userFound) {
-      throw new Error("User not found");
-    }
-    if (
-      userFound.twoFactorMode !== "APP" &&
-      userFound.twoFactorMode !== "EMAIL"
-    ) {
-      throw new Error("is 2fa not a done");
+    const { is2FAVerified } = req.user;
+    if (!is2FAVerified) {
+      throw new Error("2FA verification required");
     }
     next();
   } catch (err) {
@@ -75,5 +68,5 @@ export default {
   isLoggedIn,
   intermediateTokenVerify,
   validate,
-  is2faDone,
+  is2FAVerified,
 };

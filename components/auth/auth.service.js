@@ -1,90 +1,80 @@
 import bcrypt from "bcrypt";
-import userMdl from "../../model/user.js";
 import speakeasy from "speakeasy";
 import QRCode from "qrcode";
 import auth from "../../helper/auth.js";
-import otp from "../../model/otp.js";
 import userDb from "../../db/userDb.js";
+import _ from "lodash";
+import otpDb from "../../db/otpDb.js";
 
-const register = async (reqBody) => {
+const emailExistingCheck = async (email) => {
+  const countEmailExisting = await userDb.emailExistingCheck(email);
+
+  if (countEmailExisting > 0) {
+    return true;
+  }
+  return false;
+};
+const registerUser = async (reqBody) => {
   const { fname, lname, email, password } = reqBody;
 
   try {
+    const emailCheck = await emailExistingCheck(email);
+    if (emailCheck) {
+      throw new Error("EMAIL_ALREADY_EXIST");
+    }
     const hashPassword = bcrypt.hashSync(password, 10);
-    const newUser = await userMdl({
-      fname,
-      lname,
+    const newUser = await userDb.createUser({
+      fname: fname.trim(),
+      lname: lname.trim(),
       email,
       password: hashPassword,
       is2FAEnabled: true,
     });
-    await newUser.save();
     if (!newUser) {
-      throw new Error("Error during register");
+      throw new Error("USER_NOT_FOUND");
     }
-    const userData = {
-      _id: newUser._id,
-      fname: newUser.fname,
-      lname: newUser.lname,
-      email: newUser.email,
-      is2FAEnabled: newUser.is2FAEnabled,
-      secret: newUser.secret,
-      twoFactorMode: newUser.twoFactorMode,
-    };
+
+    const result = _.omit(newUser, ["password"]);
     return {
       message: "Registered successfully",
-      userData: userData,
+      userData: result,
     };
   } catch (err) {
-    throw new Error(message);
+    const error = new Error(err.message);
+    throw error;
   }
 };
 
 ///login user
-const login = async (reqBody) => {
+const loginUser = async (reqBody) => {
   const { email, password } = reqBody;
-  const findUser = await userDb.findByEmail(email);
+  const findUser = await userDb.findUserByEmail(email);
 
   if (!findUser) {
     throw new Error("USER_NOT_FOUND");
   }
 
   if (!bcrypt.compareSync(password, findUser.password)) {
-    throw new Error("Invalid password");
+    throw new Error("INVALID_PASSWORD");
   }
-  const userData = {
-    _id: findUser._id,
-    fname: findUser.fname,
-    lname: findUser.lname,
-    email: findUser.email,
-    is2FAEnabled: findUser.is2FAEnabled,
-    twoFactorMode: findUser.twoFactorMode,
-  };
+  const result = _.omit(findUser, ["password"]);
   return {
-    userData,
+    userData: result,
   };
 };
 
 // QR send
-const get2FAQrData = async (email) => {
+const generateQrFor2FA = async (email) => {
   try {
-    const userFound = await userDb.findByEmail(email);
+    const findUser = await userDb.findUserByEmail(email);
 
-    if (!userFound) {
-      throw new Error(`User not found`);
+    if (!findUser) {
+      throw new Error("USER_NOT_FOUND");
     }
-
-    if (!userFound.is2FAEnabled) {
-      throw new Error(`2FA not enabled`);
-    }
-
     const secret = speakeasy.generateSecret({
       name: `2FA : ${email}`,
     });
     const qr = await QRCode.toDataURL(secret.otpauth_url);
-    await userDb.updateUserById(userFound._id, {
-      secret: secret.base32,
-    });
 
     return { qr, secret: secret.base32 };
   } catch (err) {
@@ -92,19 +82,18 @@ const get2FAQrData = async (email) => {
   }
 };
 
-//
-const send2FAOnApp = async (secret, code, userId) => {
+// verify2FAOnApp
+const verify2FAOnApp = async (secret, code, userId) => {
   try {
-    const user = await userDb.findByUserId(userId);
     let verified = speakeasy.totp.verify({
-      secret: user.secret,
+      secret: secret,
       encoding: "base32",
       token: code,
     });
     if (!verified) {
       return { isTwoFactorVerified: false };
     }
-    await userMdl.findByIdAndUpdate(
+    await userDb.updateUserById(
       { _id: userId },
       {
         secret,
@@ -124,7 +113,7 @@ const send2FAOnApp = async (secret, code, userId) => {
 // app verified
 const verified2FAOnApp = async (code, userId) => {
   try {
-    const user = await userDb.updateUserById(userId);
+    const user = await userDb.findUserById(userId);
     let verified = speakeasy.totp.verify({
       secret: user.secret,
       encoding: "base32",
@@ -146,9 +135,9 @@ const verified2FAOnApp = async (code, userId) => {
 // Email send
 const send2FAOnEmail = async (email, userId) => {
   try {
-    const user = await userDb.findByUserId(userId);
+    const user = await userDb.findUserById(userId);
     if (!user) {
-      throw new Error("User not found");
+      throw new Error("USER_NOT_FOUND");
     }
     const currentTime = new Date();
     const otpExpiry = new Date(currentTime);
@@ -161,7 +150,7 @@ const send2FAOnEmail = async (email, userId) => {
       otpExpiry: otpExpiry.setMinutes(otpExpiry.getMinutes() + 1),
       email,
     };
-    await otp.create(options);
+    await otpDb.addOtpToDb(options);
 
     await userDb.updateUserById({ _id: userId }, { twoFactorMode: "EMAIL" });
     return { status: true };
@@ -174,11 +163,12 @@ const send2FAOnEmail = async (email, userId) => {
 
 const verify2FAByEmail = async (email, code, userId) => {
   try {
-    const userFound = await userDb.findByEmail(email);
-    if (!userFound) {
-      throw new Error("User not found");
+    const findUser = await userDb.findUserByEmail(email);
+    if (!findUser) {
+      throw new Error("USER_NOT_FOUND");
     }
-    const allotp = await otp.find({ email });
+    const allotp = await otpDb.findAllOtpOfuserByEmail(email);
+
     let hasValidOTP = false;
 
     allotp.forEach(async (auth) => {
@@ -186,7 +176,7 @@ const verify2FAByEmail = async (email, code, userId) => {
 
       if (isMatch && new Date() < auth.otpExpiry) {
         hasValidOTP = true;
-        await otp.deleteOne({ email, otp: auth.otp });
+        await otpDb.deleteOtp({ email, otp: auth.otp });
         return false;
       }
       return true;
@@ -209,14 +199,14 @@ const homepage = () => {
 
 const privateList = async () => {
   return {
-    message: "login",
+    message: "islogin and is2FAVerified successfully",
   };
 };
 export default {
-  register,
-  login,
-  get2FAQrData,
-  send2FAOnApp,
+  registerUser,
+  loginUser,
+  generateQrFor2FA,
+  verify2FAOnApp,
   verified2FAOnApp,
   send2FAOnEmail,
   verify2FAByEmail,

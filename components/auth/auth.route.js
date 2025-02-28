@@ -7,23 +7,24 @@ const router = express.Router();
 router.post(
   "/register",
   authMiddleware.validate(authValidation.registerUser),
-  authController.register
+  authController.registerUser
 );
 router.post(
   "/login",
   authMiddleware.validate(authValidation.loginUser),
-  authController.login
+  authController.loginUser
 );
 router.get(
   "/get-qr",
   authMiddleware.intermediateTokenVerify,
-  authController.get2FAQrData
+  authController.generateQrFor2FA
 );
 
 router.post(
   "/send-2FA-on-App",
+  authMiddleware.validate(authValidation.code),
   authMiddleware.intermediateTokenVerify,
-  authController.send2FAOnApp
+  authController.verify2FAOnApp
 );
 
 router.post(
@@ -48,7 +49,7 @@ router.get("/homepage", authMiddleware.isLoggedIn, authController.homepage);
 router.post(
   "/list",
   authMiddleware.isLoggedIn,
-  authMiddleware.is2faDone,
+  authMiddleware.is2FAVerified,
   authController.privateList
 );
 export default router;

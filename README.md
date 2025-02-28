@@ -1,5 +1,7 @@
 # 2FA
 
+# run Project :- npm run dev
+
 # jwt Authorization :-
 
                      key :- Authorization
@@ -28,8 +30,9 @@
                         }
 
 - Send send-2FA-on-App :- localhost:5000/api/auth/send-2FA-on-App
-  req body:- {
-  "code":"783609"
+  {
+  "code":"419712",
+  "secret":"KN5VK5C3PAYHKZCPFZXFWKTLNEZUG3BKMFACGKBPJQUTAXJYEZ5A"
   }
 
 - App verify :-localhost:5000/api/auth/verify-2FA-on-App

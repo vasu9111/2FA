@@ -1,19 +1,20 @@
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 import userDb from "../db/userDb.js";
-import refresh from "../model/refresh.js";
+import RefreshMdl from "../model/refresh.js";
 import { v4 as uuidv4 } from "uuid";
+import refreshDb from "../db/refreshDb.js";
 
 const intermediateToken = async (id) => {
   try {
-    const userFound = await userDb.findByUserId(id);
+    const userFound = await userDb.findUserById(id);
     if (!userFound) {
       throw new Error("User not found");
     }
     const intermediateToken = jwt.sign(
       { id, email: userFound.email },
-      config.INTERMEDIATE_TOKEN_KEY,
-      { expiresIn: `${config.INTERMEDIATE_TOKEN_EXPIRY}m` }
+      config.intermediateTokenKey,
+      { expiresIn: `${config.intermediateTokenExpiry}m` }
     );
 
     return intermediateToken;
@@ -23,7 +24,7 @@ const intermediateToken = async (id) => {
 };
 const generateAccessAndRefreshToken = async (id, isTwoFactorVerified) => {
   try {
-    const userFound = await userDb.findByUserId(id);
+    const userFound = await userDb.findUserById(id);
     if (!userFound) {
       throw new Error("User not found");
     }
@@ -37,7 +38,11 @@ const generateAccessAndRefreshToken = async (id, isTwoFactorVerified) => {
     expiresAt.setMinutes(
       expiresAt.getMinutes() + Number(config.jwt.refreshTokenExpiry)
     );
-    await refresh.create({ token: refreshToken, userId: id, expiresAt });
+    await refreshDb.createRefreshToken({
+      token: refreshToken,
+      userId: id,
+      expiresAt,
+    });
 
     return { accessToken, refreshToken };
   } catch (err) {
