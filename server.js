@@ -1,7 +1,8 @@
 import express from "express";
 import mongoose from "mongoose";
-import router from "./components/index.js";
+import router from "./indexRoutes.js";
 import envData from "./config/config.js";
+import errorCodes from "./errorcode.js";
 
 const PORT = envData.port;
 console.log("envData.port", envData.port);
@@ -18,12 +19,16 @@ mongoose
     console.log(err.message);
   });
 app.use("/api", router);
-app.use("/", (err, req, res, next) => {
-  if (err) {
-    res.status(err.status || 500).json({
-      error_code: err.code || "server_error",
-      message: err.message || "internal server error",
-    });
+app.use((err, req, res, next) => {
+  console.log("error", { err });
+
+  const errorCode = errorCodes[err.message];
+  if (errorCode) {
+    return res.status(errorCode.httpStatusCode).json(errorCode.body);
   }
+  res.status(500).json({
+    code: err.code || "server_crashed",
+    message: err.message || "Server crashed",
+  });
 });
 app.listen(PORT, () => console.log(`server running on port ${PORT}`));

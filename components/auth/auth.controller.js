@@ -1,29 +1,31 @@
 import authService from "./auth.service.js";
 import auth from "../../helper/auth.js";
-const register = async (req, res, next) => {
+const registerUser = async (req, res, next) => {
   try {
-    const register = await authService.register(req.body);
-    res.status(200).json(register);
+    const registerUser = await authService.registerUser(req.body);
+    res.status(200).json(registerUser);
   } catch (error) {
     next(error);
   }
 };
 
-const login = async (req, res, next) => {
+const loginUser = async (req, res, next) => {
   try {
-    const login = await authService.login(req.body);
-    if (login.userData.is2FAEnabled) {
-      login.IntermediateToken = await auth.intermediateToken(
-        login.userData._id
+    const loginUser = await authService.loginUser(req.body);
+    delete loginUser.userData.password;
+
+    if (loginUser.userData.is2FAEnabled) {
+      loginUser.intermediateToken = await auth.intermediateToken(
+        loginUser.userData._id
       );
     } else {
       const tokens = await auth.generateAccessAndRefreshToken(
-        login.userData._id
+        loginUser.userData._id
       );
-      login.accessToken = tokens.accessToken;
-      login.refreshToken = tokens.refreshToken;
+      loginUser.accessToken = tokens.accessToken;
+      loginUser.refreshToken = tokens.refreshToken;
     }
-    res.status(200).json(login);
+    res.status(200).json(loginUser);
   } catch (error) {
     console.log(error);
 
@@ -31,18 +33,18 @@ const login = async (req, res, next) => {
   }
 };
 
-const get2FAQrData = async (req, res, next) => {
+const generateQrFor2FA = async (req, res, next) => {
   try {
-    const qrData = await authService.get2FAQrData(req.query.email);
+    const qrData = await authService.generateQrFor2FA(req.query.email);
     res.status(200).json(qrData);
   } catch (error) {
     next(error);
   }
 };
 
-const send2FAOnApp = async (req, res, next) => {
+const verify2FAOnApp = async (req, res, next) => {
   try {
-    const Data = await authService.send2FAOnApp(
+    const Data = await authService.verify2FAOnApp(
       req.body.secret,
       req.body.code,
       req.user._id
@@ -108,10 +110,10 @@ const privateList = async (req, res, next) => {
   }
 };
 export default {
-  register,
-  login,
-  get2FAQrData,
-  send2FAOnApp,
+  registerUser,
+  loginUser,
+  generateQrFor2FA,
+  verify2FAOnApp,
   verified2FAOnApp,
   send2FAOnEmail,
   verify2FAByEmail,

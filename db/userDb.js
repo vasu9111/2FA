@@ -1,21 +1,33 @@
 import userMdl from "../model/user.js";
 
-const findByEmail = async (email) => {
-  const result = await userMdl.findOne({ email });
+const createUser = async (userData) => {
+  const result = await userMdl.create(userData);
+  return result.toJSON();
+};
+
+const findUserByEmail = async (email) => {
+  const result = await userMdl.findOne({ email }).lean();
   return result;
 };
 
-const findByUserId = async (userId) => {
-  const result = await userMdl.findById(userId);
+const findUserById = async (userId) => {
+  const result = await userMdl.findById(userId).lean();
   return result;
 };
 
-const updateUserById = async (userId, userData, email) => {
-  const result = await userMdl.findByIdAndUpdate(userId, userData, email);
+const updateUserById = async (userId, userData) => {
+  const result = await userMdl.findByIdAndUpdate(userId, userData);
   return result;
 };
+const emailExistingCheck = async (email) => {
+  const result = await userMdl.countDocuments({ email });
+  return result;
+};
+
 export default {
-  findByEmail,
-  findByUserId,
+  createUser,
+  findUserByEmail,
+  findUserById,
   updateUserById,
+  emailExistingCheck,
 };
